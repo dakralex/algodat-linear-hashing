@@ -16,12 +16,42 @@ public:
   using const_reference = const value_type &;
   using size_type = size_t;
   using difference_type = std::ptrdiff_t;
-  using const_iterator = /* iterator type */;
-  using iterator = const_iterator;
+  // using const_iterator = /* iterator type */;
+  // using iterator = const_iterator;
   using key_equal = std::equal_to<key_type>;
   using hasher = std::hash<key_type>;
 
-  ADS_set();
+private:
+  /* Node struct for the records in a Bucket implemented as a linked list */
+  struct Node {
+    key_type key;
+    Node *next {nullptr};
+    Node(const key_type &k) : key{k} {}
+  };
+
+  /* Bucket struct for records in table */
+  struct Bucket {
+    Node *items {nullptr};
+  };
+
+  /* Number of Bucket elements in table */
+  size_type table_size {0};
+
+  /* Number of Node elements in table */
+  size_type table_items {0};
+
+  /* Index for next bucket to split from table */
+  size_type table_split_index {0};
+
+  /* Table with stored buckets */
+  Bucket *table {nullptr};
+
+  size_type h(const key_type &key) const {
+    return hasher{}(key) % table_size;
+  }
+public:
+  /* Create an ADS_set with an intial size of 2^N buckets */
+  ADS_set(): table_size{1 << N}, table{new Bucket[table_size]} {}
   ADS_set(std::initializer_list<key_type> ilist);
   template<typename InputIt> ADS_set(InputIt first, InputIt last);
   // ADS_set(const ADS_set &other);
@@ -31,11 +61,11 @@ public:
   // ADS_set &operator=(const ADS_set &other);
   // ADS_set &operator=(std::initializer_list<key_type> ilist);
 
-  size_type size() const;
-  bool empty() const;
+  size_type size() const { return table_items; };
+  bool empty() const { return table_items == 0; };
 
   void insert(std::initializer_list<key_type> ilist);
-  std::pair<iterator,bool> insert(const key_type &key);
+  // std::pair<iterator,bool> insert(const key_type &key);
   template<typename InputIt> void insert(InputIt first, InputIt last);
 
   // void clear();
