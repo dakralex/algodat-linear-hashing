@@ -28,22 +28,25 @@ public:
   using hasher = std::hash<key_type>;
 
 private:
-  /* A bucket's item count threshold until next bucket should be split */
-  static const size_type split_bucket_size {N};
-
+  /* Hash table entry implemented as linked list of buckets */
   struct Bucket {
-    // Make the values array contain the primary and overflow bucket
-    key_type values[2u * N + 1];
+    /* Bucket with N values */
+    struct Slice {
+      // Make the values array contain the primary and overflow bucket
+      key_type values[N];
+      size_type size {0};
+      Slice *next {nullptr};
+    };
+
+    Slice *head {new Slice};
+    Slice *tail {head};
     size_type size {0};
 
-    /* Add a key to the bucket */
-    void add(const key_type &key);
+    /* Add a key to the bucket; Returns true if bucket overflowed */
+    bool add(const key_type &key);
 
     /* Locate a stored key in the bucket */
     key_type *locate(const key_type &key);
-
-    /* Clear the values stored in the bucket */
-    void clear() { size = 0; }
 
     void dump(std::ostream &o = std::cerr) const;
   };
@@ -63,7 +66,7 @@ private:
   /* Number of items in hash table */
   size_type table_items_size {0};
 
-  /* Hash table with buckets */
+  /* Hash table with bucket lists */
   Bucket *table {nullptr};
 
   /* Get the bucket index for a given key in the hash table */
@@ -73,12 +76,12 @@ private:
 
   /* Hash function for current split round */
   size_type h(const key_type &key) const {
-    return hash(key) % table_split_size;
+    return hash(key) % (1 << split_round);
   }
 
   /* Hash function for next split round */
   size_type g(const key_type &key) const {
-    return hash(key) % table_size;
+    return hash(key) % (1 << (split_round + 1));
   }
 
   /* Copy the contents of old_table to new_table */
@@ -180,12 +183,20 @@ typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type &k
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::key_type *ADS_set<Key, N>::Bucket::locate(const key_type &key) {
-  // Search for an equivalent key in the bucket
-  for (size_type i {0}; i < size; ++i) {
-    if (key_equal{}(values[i], key)) {
-      return &values[i];
+  Slice *bucket = head;
+
+  // Go through all buckets in linked list
+  do {
+    // Search for an equivalent key in the bucket
+    for (size_type i {0}; i < bucket->size; ++i) {
+      if (key_equal{}(bucket->values[i], key)) {
+        return &bucket->values[i];
+      }
+
+      bucket = bucket->next;
     }
-  }
+  } while(bucket);
+
 
   return nullptr;
 }
@@ -263,27 +274,33 @@ void ADS_set<Key, N>::split() {
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::add(const key_type &key) {
+bool ADS_set<Key, N>::Bucket::add(const key_type &key) {
+  Slice *bucket = tail;
+
+  while (bucket->size >= N) {
+    if (bucket->next == nullptr) {
+      bucket->next = new Slice();
+      tail = bucket->next;
+    }
+
+    bucket = bucket->next;
+  }
+
   // Store key in bucket and increment the bucket's size
-  values[size++] = key;
+  bucket->values[bucket->size++] = key;
+
+  // Return whether bucket has overflown because of add
+  return bucket == tail && bucket->size == 1;
 }
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::add(const key_type &key) {
   // Silently ignore pre-existing keys
-  if (count(key)) return;
+  // if (count(key)) return;
 
   size_type index {bucket_at(key)};
 
   table[index].add(key);
-
-  // Split if the bucket reached its split threshold
-  if (
-    table[index].size > split_bucket_size &&
-    (table[index].size - 1) % split_bucket_size == 0
-  ) {
-    split();
-  }
 
   ++table_items_size;
 }
@@ -297,12 +314,22 @@ template<typename InputIt> void ADS_set<Key, N>::insert(InputIt first, InputIt l
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::Bucket::dump(std::ostream &o) const {
+  Slice *bucket = head;
+
   o << "(size: " << std::setfill(' ') << std::setw(5) << size << ") | ";
 
-  for (size_type i {}; i < size; ++i) {
-    if (i == N) o << " -> | ";
-    o << values[i] << " ";
-  }
+  do {
+    if (bucket != head) {
+      o << " -> | ";
+    }
+
+    // Search for an equivalent key in the bucket
+    for (size_type i {0}; i < bucket->size; ++i) {
+      o << bucket->values[i] << " ";
+    }
+
+    bucket = bucket->next;
+  } while(bucket);
 }
 
 template<typename Key, size_t N>
