@@ -33,7 +33,7 @@ private:
 
   struct Bucket {
     // Make the values array contain the primary and overflow bucket
-    key_type values[2u * N];
+    key_type values[2u * N + 1];
     size_type size {0};
 
     /* Add a key to the bucket */
@@ -41,6 +41,9 @@ private:
 
     /* Locate a stored key in the bucket */
     key_type *locate(const key_type &key);
+
+    /* Clear the values stored in the bucket */
+    void clear() { size = 0; }
 
     void dump(std::ostream &o = std::cerr) const;
   };
@@ -51,8 +54,11 @@ private:
   /* Index for next bucket to split from hash table (nextToSplit in lectures) */
   size_type table_split_index {0};
 
-  /* Number of buckets in hash table */
+  /* Actual number of buckets in hash table */
   size_type table_size {0};
+
+  /* Number of buckets in the hash table according to split_round */
+  size_type table_split_size {0};
 
   /* Number of items in hash table */
   size_type table_items_size {0};
@@ -63,15 +69,29 @@ private:
   /* Get the bucket index for a given key in the hash table */
   size_type bucket_at(const key_type &key) const;
 
+  const hasher hash{};
+
   /* Hash function for current split round */
   size_type h(const key_type &key) const {
-    return hasher{}(key) % table_size;
+    return hash(key) % table_split_size;
   }
 
   /* Hash function for next split round */
   size_type g(const key_type &key) const {
-    return hasher{}(key) % (table_size << 1);
+    return hash(key) % table_size;
   }
+
+  /* Copy the contents of old_table to new_table */
+  void copy(const Bucket *old_table, size_type old_table_size, Bucket *new_table);
+
+  /* Copy the contents of old_values to new_values */
+  void copy(const key_type *old_values, size_type old_values_size, key_type *new_values);
+
+  /* Allocate buckets for the current splitting round */
+  void expand();
+
+  /* Split the next to be split bucket in the hash table */
+  void split();
 
   /* Add a key to the hash table */
   void add(const key_type &key);
@@ -80,7 +100,7 @@ private:
   key_type *locate(const key_type &key) const;
 public:
   /* Create an empty ADS_set with an initial split_round  */
-  ADS_set(): split_round {1}, table_size {1u << split_round}, table{new Bucket[table_size]} {}
+  ADS_set(): split_round {1}, table_size {1u << split_round}, table_split_size{table_size}, table{new Bucket[table_size]} {}
 
   /* Create an ADS_set with a given list of items */
   ADS_set(std::initializer_list<key_type> ilist) { insert(ilist); }
@@ -178,14 +198,74 @@ typename ADS_set<Key, N>::key_type *ADS_set<Key,N>::locate(const key_type &key) 
 }
 
 template<typename Key, size_t N>
+void ADS_set<Key, N>::copy(const Bucket *old_table, size_type old_table_size, Bucket *new_table) {
+  const Bucket *end = old_table + old_table_size;
+
+  // Go through the old table and copy items by reference
+  while (old_table != end) {
+    *new_table = *old_table;
+    ++old_table;
+    ++new_table;
+  }
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::copy(const key_type *old_values, size_type old_values_size, key_type *new_values) {
+  const key_type *end = old_values + old_values_size;
+
+  // Go through the old values and copy items by reference
+  while (old_values != end) {
+    *new_values = *old_values;
+    ++old_values;
+    ++new_values;
+  }
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::expand() {
+  // TODO This looks like something to optimize for later (idea: pointer array)
+  size_type new_table_size = table_size << 1;
+  Bucket *new_table = new Bucket[new_table_size];
+
+  // Copy current table content to new_table and free memory
+  copy(table, table_size, new_table);
+  delete[] table;
+
+  // Update table to new_table
+  table = new_table;
+  table_size = new_table_size;
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::split() {
+  // Allocate double the hash table size for whole next round of splitting
+  if (table_size == 1u << split_round) {
+    expand();
+  }
+
+  // Reset table_split_index
+  if (table_split_index >= table_size >> 1) {
+    table_split_index = 0;
+  }
+
+  // Get values from bucket that should be split
+  Bucket *to_split = &table[table_split_index++];
+  size_type values_to_split_size = to_split->size;
+  key_type values_to_split[2u * N + 1];
+  copy(to_split->values, values_to_split_size, values_to_split);
+  to_split->clear();
+
+  table_items_size -= values_to_split_size;
+
+  for (size_type i {0}; i < values_to_split_size; ++i) {
+    add(values_to_split[i]);
+  }
+}
+
+template<typename Key, size_t N>
 void ADS_set<Key, N>::Bucket::add(const key_type &key) {
   // Store key in bucket and increment the bucket's size
   values[size++] = key;
-
-  // Split if the bucket reached its split threshold
-  if (size > split_bucket_size - 1) {
-    // TODO Split method here
-  }
 }
 
 template<typename Key, size_t N>
@@ -197,12 +277,20 @@ void ADS_set<Key, N>::add(const key_type &key) {
 
   table[index].add(key);
 
+  // Split if the bucket reached its split threshold
+  if (
+    table[index].size > split_bucket_size &&
+    (table[index].size - 1) % split_bucket_size == 0
+  ) {
+    split();
+  }
+
   ++table_items_size;
 }
 
 template<typename Key, size_t N>
 template<typename InputIt> void ADS_set<Key, N>::insert(InputIt first, InputIt last) {
-  for (auto it{first}; it != last; ++it) {
+  for (auto it {first}; it != last; ++it) {
     add(*it);
   }
 }
@@ -223,7 +311,8 @@ void ADS_set<Key, N>::dump(std::ostream &o) const {
   o << "=== HASH TABLE ===\n\n";
 
   for (size_type i {0}; i < table_size; ++i) {
-    o << i << " | ";
+    o << (table_split_index == i ? "-> " : "   ");
+    o << std::setfill(' ') << std::setw(4) << i << " | ";
     table[i].dump(o);
     o << "\n";
   }
