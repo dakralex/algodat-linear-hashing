@@ -184,21 +184,21 @@ typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type &k
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::Bucket::clear(key_type *values) {
-  Slice *bucket = head;
-  Slice *tmp = bucket;
+  Slice *slice = head;
+  Slice *tmp = slice;
 
   // Go through all buckets in linked list
-  do {
-    // Search for an equivalent key in the bucket
-    for (size_type j {0}; j < bucket->size; ++j) {
-      *values = bucket->values[j];
+  while (slice) {
+    // Search for an equivalent key in the slice
+    for (size_type j {0}; j < slice->size; ++j) {
+      *values = slice->values[j];
       ++values;
     }
 
-    tmp = bucket->next;
-    delete bucket;
-    bucket = tmp;
-  } while(bucket);
+    tmp = slice->next;
+    delete slice;
+    slice = tmp;
+  }
 
   head = new Slice();
   size = head->size;
@@ -206,19 +206,19 @@ void ADS_set<Key, N>::Bucket::clear(key_type *values) {
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::key_type *ADS_set<Key, N>::Bucket::locate(const key_type &key) {
-  Slice *bucket = head;
+  Slice *slice = head;
 
   // Go through all buckets in linked list
-  do {
-    // Search for an equivalent key in the bucket
-    for (size_type i {0}; i < bucket->size; ++i) {
-      if (key_equal{}(bucket->values[i], key)) {
-        return &bucket->values[i];
+  while (slice) {
+    // Search for an equivalent key in the slice
+    for (size_type i {0}; i < slice->size; ++i) {
+      if (key_equal{}(slice->values[i], key)) {
+        return &slice->values[i];
       }
-
-      bucket = bucket->next;
     }
-  } while(bucket);
+
+    slice = slice->next;
+  }
 
 
   return nullptr;
@@ -320,7 +320,7 @@ bool ADS_set<Key, N>::Bucket::add(const key_type &key) {
 template<typename Key, size_t N>
 void ADS_set<Key, N>::add(const key_type &key, bool overflowable) {
   // Silently ignore pre-existing keys
-  // if (count(key)) return;
+  if (count(key)) return;
 
   size_type index {bucket_at(key)};
 
@@ -346,7 +346,7 @@ void ADS_set<Key, N>::Bucket::dump(std::ostream &o) const {
 
   o << "(size: " << std::setfill(' ') << std::setw(5) << size << ") | ";
 
-  do {
+  while (slice) {
     if (slice != head) {
       o << " -> | ";
     }
@@ -356,7 +356,7 @@ void ADS_set<Key, N>::Bucket::dump(std::ostream &o) const {
     }
 
     slice = slice->next;
-  } while(slice);
+  }
 }
 
 template<typename Key, size_t N>
