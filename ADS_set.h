@@ -43,8 +43,15 @@ private:
     Slice *tail {head};
     size_type size {0};
 
-    /* Clear values and write them to &values */
-    void clear(key_type *values);
+    // ~Bucket() {
+    //   clear();
+    // }
+
+    /* Clear values */
+    void clear();
+
+    /* Copy values to values */
+    void copy(key_type *values);
 
     /* Locate a stored key in the bucket */
     key_type *locate(const key_type &key);
@@ -107,10 +114,10 @@ public:
   ADS_set(): split_round {1}, table_size {1u << split_round}, table{new Bucket[table_size]} {}
 
   /* Create an ADS_set with a given list of items */
-  ADS_set(std::initializer_list<key_type> ilist) { insert(ilist); }
+  ADS_set(std::initializer_list<key_type> ilist): ADS_set {} { insert(ilist); }
 
   /* Create an ADS_set with a given range of items */
-  template<typename InputIt> ADS_set(InputIt first, InputIt last) { insert(first, last); }
+  template<typename InputIt> ADS_set(InputIt first, InputIt last): ADS_set {} { insert(first, last); }
   // ADS_set(const ADS_set &other);
 
   ~ADS_set() { delete[] table; }
@@ -183,33 +190,41 @@ typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type &k
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::clear(key_type *values) {
-  Slice *slice = head;
-  Slice *tmp = slice;
+void ADS_set<Key, N>::Bucket::clear() {
+  Slice *slice {head};
 
-  // Go through all buckets in linked list
-  while (slice) {
-    // Search for an equivalent key in the slice
-    for (size_type j {0}; j < slice->size; ++j) {
-      *values = slice->values[j];
-      ++values;
-    }
-
-    tmp = slice->next;
-    delete slice;
-    slice = tmp;
+  while (slice != nullptr) {
+    slice->size = 0;
+    slice = slice->next;
   }
 
-  head = new Slice();
-  size = head->size;
+  head = new Slice;
+  tail = head;
+  size = 0;
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::Bucket::copy(key_type *values) {
+  Slice *slice {head};
+
+  // Go through all buckets in linked list
+  while (slice != nullptr) {
+    key_type *slice_values = slice->values;
+
+    for (size_type i {0}; i < slice->size; ++i) {
+      *values++ = *slice_values++;
+    }
+
+    slice = slice->next;
+  }
 }
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::key_type *ADS_set<Key, N>::Bucket::locate(const key_type &key) {
-  Slice *slice = head;
+  Slice *slice {head};
 
   // Go through all buckets in linked list
-  while (slice) {
+  while (slice != nullptr) {
     // Search for an equivalent key in the slice
     for (size_type i {0}; i < slice->size; ++i) {
       if (key_equal{}(slice->values[i], key)) {
@@ -233,7 +248,7 @@ typename ADS_set<Key, N>::key_type *ADS_set<Key,N>::locate(const key_type &key) 
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::copy(const Bucket *old_table, size_type old_table_size, Bucket *new_table) {
-  const Bucket *end = old_table + old_table_size;
+  const Bucket *end {old_table + old_table_size};
 
   // Go through the old table and copy items by reference
   while (old_table != end) {
@@ -276,22 +291,24 @@ void ADS_set<Key, N>::split() {
     expand();
   }
 
+
   Bucket *to_split = &table[table_split_index];
   size_type to_split_size = to_split->size;
   key_type *values {new key_type[to_split_size]};
-  to_split->clear(values);
+  to_split->copy(values);
+  to_split->clear();
 
   table_items_size -= to_split_size;
-
-  for (size_type i {0}; i < to_split_size; ++i) {
-    add(values[i], false);
-  }
 
   if (table_split_index >= (1u << split_round)) {
     table_split_index = 0;
     ++split_round;
   } else {
     ++table_split_index;
+  }
+
+  for (size_type i {0}; i < to_split_size; ++i) {
+    add(values[i], false);
   }
 }
 
@@ -346,7 +363,7 @@ void ADS_set<Key, N>::Bucket::dump(std::ostream &o) const {
 
   o << "(size: " << std::setfill(' ') << std::setw(5) << size << ") | ";
 
-  while (slice) {
+  while (slice != nullptr) {
     if (slice != head) {
       o << " -> | ";
     }
