@@ -43,10 +43,6 @@ private:
     Slice *tail {head};
     size_type size {0};
 
-    // ~Bucket() {
-    //   clear();
-    // }
-
     /* Clear values */
     void clear();
 
@@ -77,9 +73,7 @@ private:
   /* Hash table with bucket lists */
   Bucket *table {nullptr};
 
-  /* Get the bucket index for a given key in the hash table */
-  size_type bucket_at(const key_type &key) const;
-
+  /* Hasher instance for hash table */
   const hasher hash{};
 
   /* Hash function for current split round */
@@ -92,11 +86,11 @@ private:
     return hash(key) % (1 << (split_round + 1));
   }
 
+  /* Get the bucket index for a given key in the hash table */
+  size_type bucket_at(const key_type &key) const;
+
   /* Copy the contents of old_table to new_table */
   void copy(const Bucket *old_table, size_type old_table_size, Bucket *new_table);
-
-  /* Copy the contents of old_values to new_values */
-  void copy(const key_type *old_values, size_type old_values_size, key_type *new_values);
 
   /* Allocate buckets for the current splitting round */
   void expand();
@@ -109,6 +103,7 @@ private:
 
   /* Locate a stored key in the hash table */
   key_type *locate(const key_type &key) const;
+
 public:
   /* Create an empty ADS_set with an initial split_round  */
   ADS_set(): split_round {1}, table_size {1u << split_round}, table{new Bucket[table_size]} {}
@@ -118,6 +113,7 @@ public:
 
   /* Create an ADS_set with a given range of items */
   template<typename InputIt> ADS_set(InputIt first, InputIt last): ADS_set {} { insert(first, last); }
+
   // ADS_set(const ADS_set &other);
 
   ~ADS_set() { delete[] table; }
@@ -157,37 +153,6 @@ public:
   // friend bool operator==(const ADS_set &lhs, const ADS_set &rhs);
   // friend bool operator!=(const ADS_set &lhs, const ADS_set &rhs);
 };
-
-// template <typename Key, size_t N>
-// class ADS_set<Key,N>::/* iterator type */ {
-// public:
-//   using value_type = Key;
-//   using difference_type = std::ptrdiff_t;
-//   using reference = const value_type &;
-//   using pointer = const value_type *;
-//   using iterator_category = std::forward_iterator_tag;
-//
-//   explicit /* iterator type */(/* implementation-dependent */);
-//   reference operator*() const;
-//   pointer operator->() const;
-//   /* iterator type */ &operator++();
-//   /* iterator type */ operator++(int);
-//   friend bool operator==(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
-//   friend bool operator!=(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
-// };
-
-// template <typename Key, size_t N>
-// void swap(ADS_set<Key,N> &lhs, ADS_set<Key,N> &rhs) { lhs.swap(rhs); }
-
-template<typename Key, size_t N>
-typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type &key) const {
-  size_type index {h(key)};
-
-  // Use next split round's hash function for already split buckets
-  if (index < table_split_index) index = g(key);
-
-  return index;
-}
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::Bucket::clear() {
@@ -239,6 +204,38 @@ typename ADS_set<Key, N>::key_type *ADS_set<Key, N>::Bucket::locate(const key_ty
   return nullptr;
 }
 
+template<typename Key, size_t N>
+bool ADS_set<Key, N>::Bucket::add(const key_type &key) {
+  bool overflown = false;
+  Slice *slice = tail;
+
+  // If last slice is already full, create a new one
+  if (slice->size >= N) {
+    slice->next = new Slice();
+    tail = slice->next;
+    slice = slice->next;
+    overflown = true;
+  }
+
+  // Store key in slice and increment its size
+  slice->values[slice->size++] = key;
+
+  // Increment the buckets total size
+  ++size;
+
+  return overflown;
+}
+
+template<typename Key, size_t N>
+typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type &key) const {
+  size_type index {h(key)};
+
+  // Use next split round's hash function for already split buckets
+  if (index < table_split_index) index = g(key);
+
+  return index;
+}
+
 template <typename Key, size_t N>
 typename ADS_set<Key, N>::key_type *ADS_set<Key,N>::locate(const key_type &key) const {
   size_type index {bucket_at(key)};
@@ -255,18 +252,6 @@ void ADS_set<Key, N>::copy(const Bucket *old_table, size_type old_table_size, Bu
     *new_table = *old_table;
     ++old_table;
     ++new_table;
-  }
-}
-
-template<typename Key, size_t N>
-void ADS_set<Key, N>::copy(const key_type *old_values, size_type old_values_size, key_type *new_values) {
-  const key_type *end = old_values + old_values_size;
-
-  // Go through the old values and copy items by reference
-  while (old_values != end) {
-    *new_values = *old_values;
-    ++old_values;
-    ++new_values;
   }
 }
 
@@ -310,28 +295,6 @@ void ADS_set<Key, N>::split() {
   for (size_type i {0}; i < to_split_size; ++i) {
     add(values[i], false);
   }
-}
-
-template<typename Key, size_t N>
-bool ADS_set<Key, N>::Bucket::add(const key_type &key) {
-  bool overflown = false;
-  Slice *slice = tail;
-
-  // If last slice is already full, create a new one
-  if (slice->size >= N) {
-    slice->next = new Slice();
-    tail = slice->next;
-    slice = slice->next;
-    overflown = true;
-  }
-
-  // Store key in slice and increment its size
-  slice->values[slice->size++] = key;
-
-  // Increment the buckets total size
-  ++size;
-
-  return overflown;
 }
 
 template<typename Key, size_t N>
@@ -390,5 +353,26 @@ void ADS_set<Key, N>::dump(std::ostream &o) const {
 
   o << "\n";
 }
+
+// template <typename Key, size_t N>
+// class ADS_set<Key,N>::/* iterator type */ {
+// public:
+//   using value_type = Key;
+//   using difference_type = std::ptrdiff_t;
+//   using reference = const value_type &;
+//   using pointer = const value_type *;
+//   using iterator_category = std::forward_iterator_tag;
+//
+//   explicit /* iterator type */(/* implementation-dependent */);
+//   reference operator*() const;
+//   pointer operator->() const;
+//   /* iterator type */ &operator++();
+//   /* iterator type */ operator++(int);
+//   friend bool operator==(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
+//   friend bool operator!=(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
+// };
+
+// template <typename Key, size_t N>
+// void swap(ADS_set<Key,N> &lhs, ADS_set<Key,N> &rhs) { lhs.swap(rhs); }
 
 #endif // ADS_SET_H
