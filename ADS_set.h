@@ -16,14 +16,14 @@
 template<typename Key, size_t N = 5>
 class ADS_set {
 public:
-    // class /* iterator type (implementation-defined) */;
+    // class Iterator;
     using value_type = Key;
     using key_type = Key;
     using reference = value_type&;
     using const_reference = const value_type&;
     using size_type = size_t;
     using difference_type = std::ptrdiff_t;
-    // using const_iterator = /* iterator type */;
+    // using const_iterator = Iterator;
     // using iterator = const_iterator;
     using key_equal = std::equal_to<key_type>;
     using hasher = std::hash<key_type>;
@@ -34,7 +34,7 @@ private:
         /* Bucket with N values */
         struct Slice {
             // Make the values array contain the primary and overflow bucket
-            key_type values[N];
+            value_type values[N];
             size_type size {0};
             Slice* next {nullptr};
         };
@@ -43,17 +43,17 @@ private:
         Slice* tail {head};
         size_type size {0};
 
-        /* Clear values */
-        void clear();
-
-        /* Copy values to values */
-        void copy(key_type* values);
-
         /* Locate a stored key in the bucket */
         key_type* locate(const key_type& key);
 
         /* Add a key to the bucket; Returns true if bucket overflowed */
         bool add(const key_type& key);
+
+        /* Copy values to values */
+        void copy(key_type* values);
+
+        /* Clear values */
+        void clear();
 
         void dump(std::ostream& o = std::cerr) const;
     };
@@ -115,11 +115,11 @@ public:
     template<typename InputIt>
     ADS_set(InputIt first, InputIt last): ADS_set {} { insert(first, last); }
 
-    // ADS_set(const ADS_set &other);
+    // ADS_set(const ADS_set& other);
 
     ~ADS_set() { delete[] table; }
 
-    // ADS_set &operator=(const ADS_set &other);
+    // ADS_set &operator=(const ADS_set& other);
     // ADS_set &operator=(std::initializer_list<key_type> ilist);
 
     /* Return the count of the stored items in the hash table */
@@ -131,60 +131,31 @@ public:
     /* Insert the given list of items in the hash table */
     void insert(std::initializer_list <key_type> ilist) { insert(ilist.begin(), ilist.end()); }
 
-    // std::pair<iterator,bool> insert(const key_type &key);
+    // std::pair<iterator,bool> insert(const key_type& key);
 
     /* Insert the given range of items in the hash table */
     template<typename InputIt>
     void insert(InputIt first, InputIt last) { for (auto it {first}; it != last; ++it) add(*it); }
 
-    // void clear();
-    // size_type erase(const key_type &key);
+    void clear() { ADS_set tmp; swap(tmp); }
+
+    // size_type erase(const key_type& key);
 
     /* Count the items in the hash table with key */
     size_type count(const key_type& key) const { return locate(key) != nullptr; }
 
-    // iterator find(const key_type &key) const;
+    // iterator find(const key_type& key) const;
 
-    // void swap(ADS_set &other);
+    void swap(ADS_set& other);
 
     // const_iterator begin() const;
     // const_iterator end() const;
 
     void dump(std::ostream& o = std::cerr) const;
 
-    // friend bool operator==(const ADS_set &lhs, const ADS_set &rhs);
-    // friend bool operator!=(const ADS_set &lhs, const ADS_set &rhs);
+    // friend bool operator==(const ADS_set& lhs, const ADS_set& rhs);
+    // friend bool operator!=(const ADS_set& lhs, const ADS_set& rhs);
 };
-
-template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::clear() {
-    Slice* slice {head};
-
-    while (slice != nullptr) {
-        slice->size = 0;
-        slice = slice->next;
-    }
-
-    head = new Slice;
-    tail = head;
-    size = 0;
-}
-
-template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::copy(key_type* values) {
-    Slice* slice {head};
-
-    // Go through all buckets in linked list
-    while (slice != nullptr) {
-        key_type* slice_values = slice->values;
-
-        for (size_type i {0}; i < slice->size; ++i) {
-            *values++ = *slice_values++;
-        }
-
-        slice = slice->next;
-    }
-}
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::key_type* ADS_set<Key, N>::Bucket::locate(const key_type& key) {
@@ -226,6 +197,36 @@ bool ADS_set<Key, N>::Bucket::add(const key_type& key) {
     ++size;
 
     return overflown;
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::Bucket::copy(key_type* values) {
+    Slice* slice {head};
+
+    // Go through all buckets in linked list
+    while (slice != nullptr) {
+        key_type* slice_values = slice->values;
+
+        for (size_type i {0}; i < slice->size; ++i) {
+            *values++ = *slice_values++;
+        }
+
+        slice = slice->next;
+    }
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::Bucket::clear() {
+    Slice* slice {head};
+
+    while (slice != nullptr) {
+        slice->size = 0;
+        slice = slice->next;
+    }
+
+    head = new Slice;
+    tail = head;
+    size = 0;
 }
 
 template<typename Key, size_t N>
@@ -345,8 +346,19 @@ void ADS_set<Key, N>::dump(std::ostream& o) const {
     o << "\n";
 }
 
+template<typename Key, size_t N>
+void ADS_set<Key, N>::swap(ADS_set& other) {
+  std::swap(table, other.table);
+  std::swap(split_round, other.split_round);
+  std::swap(table_split_index, other.table_split_index);
+  std::swap(table_size, other.table_size);
+  std::swap(table_items_size, other.table_items_size);
+  std::swap(hash, other.hash);
+}
+
 // template <typename Key, size_t N>
-// class ADS_set<Key,N>::/* iterator type */ {
+// class ADS_set<Key,N>::Iterator {
+//   value_type* value;
 // public:
 //   using value_type = Key;
 //   using difference_type = std::ptrdiff_t;
@@ -354,15 +366,15 @@ void ADS_set<Key, N>::dump(std::ostream& o) const {
 //   using pointer = const value_type *;
 //   using iterator_category = std::forward_iterator_tag;
 //
-//   explicit /* iterator type */(/* implementation-dependent */);
+//   explicit Iterator(/* implementation-dependent */);
 //   reference operator*() const;
 //   pointer operator->() const;
-//   /* iterator type */ &operator++();
-//   /* iterator type */ operator++(int);
-//   friend bool operator==(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
-//   friend bool operator!=(const /* iterator type */ &lhs, const /* iterator type */ &rhs);
+//   Iterator &operator++();
+//   Iterator operator++(int);
+//   friend bool operator==(const Iterator &lhs, const Iterator &rhs);
+//   friend bool operator!=(const Iterator &lhs, const Iterator &rhs);
 // };
-
+//
 // template <typename Key, size_t N>
 // void swap(ADS_set<Key,N> &lhs, ADS_set<Key,N> &rhs) { lhs.swap(rhs); }
 
