@@ -93,7 +93,7 @@ private:
     void copy(const Bucket* old_table, size_type old_table_size, Bucket* new_table);
 
     /* Allocate buckets for the current splitting round */
-    void expand();
+    void reserve(size_type new_table_size);
 
     /* Split the next to be split bucket in the hash table */
     void split();
@@ -250,17 +250,13 @@ void ADS_set<Key, N>::copy(const Bucket* old_table, size_type old_table_size, Bu
     const Bucket* end {old_table + old_table_size};
 
     // Go through the old table and copy items by reference
-    while (old_table != end) {
-        *new_table = *old_table;
-        ++old_table;
-        ++new_table;
+    for (; old_table != end; (void)++new_table, (void)++old_table) {
+      *new_table = *old_table;
     }
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::expand() {
-    // TODO This looks like something to optimize for later (idea: pointer array)
-    size_type new_table_size = table_size << 1;
+void ADS_set<Key, N>::reserve(size_type new_table_size) {
     Bucket* new_table = new Bucket[new_table_size];
 
     // Copy current table content to new_table and free memory
@@ -275,9 +271,8 @@ void ADS_set<Key, N>::expand() {
 template<typename Key, size_t N>
 void ADS_set<Key, N>::split() {
     if (table_size == 1u << split_round) {
-        expand();
+        reserve(table_size << 1);
     }
-
 
     Bucket* to_split = &table[table_split_index];
     size_type to_split_size = to_split->size;
