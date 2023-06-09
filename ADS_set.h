@@ -87,11 +87,14 @@ public:
     template<typename InputIt>
     ADS_set(InputIt first, InputIt last): ADS_set {} { insert(first, last); }
 
-    ADS_set(const ADS_set& other) { swap(other); }
+    ADS_set(const ADS_set& other) { swap(*this, other); }
+
+    ADS_set(ADS_set&& other) noexcept: ADS_set {} { swap(*this, other); }
 
     ~ADS_set() { delete[] table; }
 
-    // ADS_set &operator=(const ADS_set& other);
+    ADS_set& operator=(ADS_set other);
+
     // ADS_set &operator=(std::initializer_list<key_type> ilist);
 
     /* Return the count of the stored items in the hash table */
@@ -118,7 +121,9 @@ public:
 
     // iterator find(const key_type& key) const;
 
-    void swap(ADS_set& other);
+    void swap(ADS_set& first, ADS_set& second);
+
+    void swap(ADS_set& other) { swap(*this, other); }
 
     // const_iterator begin() const;
     // const_iterator end() const;
@@ -144,22 +149,11 @@ public:
 
     ~Bucket() { delete[] values; }
 
-    Bucket(const Bucket& other) {
-        values_size = other.values_size;
-        values_capacity = other.values_capacity;
-        values = new key_type[values_capacity];
-        std::copy(other.values, other.values + values_size, values);
-    }
+    Bucket(const Bucket& other) { swap(*this, other); }
 
-    Bucket(Bucket&& other) noexcept {
-        values_size = std::exchange(other.values_size, 0);
-        values_capacity = std::exchange(other.values_capacity, N);
-        values = std::exchange(other.values, new key_type[values_capacity]);
-    }
+    Bucket(Bucket&& other) noexcept: Bucket {} { swap(*this, other); }
 
-    Bucket& operator=(const Bucket& other);
-
-    Bucket& operator=(Bucket&& other) noexcept;
+    Bucket& operator=(Bucket other);
 
     const key_type& operator[](size_type index) const { return values[index]; }
 
@@ -169,15 +163,17 @@ public:
     key_type* locate(const key_type& key) const;
 
     /* Push a key to the bucket */
-    void add(const key_type& key);
-
-    void add(key_type&& key);
+    void add(key_type key);
 
     size_type count(const key_type& key) const { return locate(key) != nullptr; }
 
     [[nodiscard]] size_type size() const { return values_size; }
 
     [[nodiscard]] size_type full() const { return values_size == values_capacity; }
+
+    void swap(Bucket& first, Bucket& second);
+
+    void swap(Bucket& other) { swap(*this, other); }
 
     void dump(std::ostream& o = std::cerr) const;
 };
@@ -205,27 +201,11 @@ public:
 // void swap(ADS_set<Key,N> &lhs, ADS_set<Key,N> &rhs) { lhs.swap(rhs); }
 
 template<typename Key, size_t N>
-typename ADS_set<Key, N>::Bucket& ADS_set<Key, N>::Bucket::operator=(const Bucket& other) {
-    if (this != &other) {
-        values_size = other.values_size;
-        values_capacity = other.values_capacity;
-        std::copy(other.values, other.values + other.values_size, values);
-    }
+typename ADS_set<Key, N>::Bucket& ADS_set<Key, N>::Bucket::operator=(Bucket other) {
+    swap(*this, other);
 
     return *this;
 }
-
-template<typename Key, size_t N>
-typename ADS_set<Key, N>::Bucket& ADS_set<Key, N>::Bucket::operator=(Bucket&& other) noexcept {
-    if (this != &other) {
-        values_size = std::exchange(other.values_size, 0);
-        values_capacity = std::exchange(other.values_capacity, N);
-        values = std::exchange(other.values, new key_type[values_capacity]);
-    }
-
-    return *this;
-}
-
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::Bucket::expand() {
@@ -241,7 +221,7 @@ void ADS_set<Key, N>::Bucket::expand() {
     delete[] values;
 
     // Update values and capacity
-    values = new_values;
+    values = std::move(new_values);
     values_capacity = new_values_capacity;
 }
 
@@ -257,19 +237,21 @@ typename ADS_set<Key, N>::key_type* ADS_set<Key, N>::Bucket::locate(const key_ty
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::add(const key_type& key) {
+void ADS_set<Key, N>::Bucket::add(key_type key) {
     // Expand bucket if it exceeds capacity
     if (values_size >= values_capacity) expand();
 
     // Store key in slice and increment its size
-    values[values_size++] = key;
+    values[values_size++] = std::move(key);
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::Bucket::add(key_type&& key) {
-    if (values_size >= values_capacity) expand();
+void ADS_set<Key, N>::Bucket::swap(Bucket& first, Bucket& second) {
+    using std::swap;
 
-    values[values_size++] = std::move(key);
+    swap(first.values_size, second.values_size);
+    swap(first.values_capacity, second.values_capacity);
+    swap(first.values, second.values);
 }
 
 template<typename Key, size_t N>
@@ -312,7 +294,7 @@ void ADS_set<Key, N>::reserve(size_type new_table_size) {
     delete[] table;
 
     // Update table to new_table
-    table = new_table;
+    table = std::move(new_table);
     table_size = new_table_size;
 }
 
@@ -374,19 +356,28 @@ void ADS_set<Key, N>::add(key_type&& key) {
 }
 
 template<typename Key, size_t N>
+typename ADS_set<Key, N>::ADS_set& ADS_set<Key, N>::operator=(ADS_set other) {
+    swap(*this, other);
+
+    return *this;
+}
+
+template<typename Key, size_t N>
 void ADS_set<Key, N>::clear() {
     ADS_set tmp;
     swap(tmp);
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::swap(ADS_set& other) {
-    std::swap(table, other.table);
-    std::swap(split_round, other.split_round);
-    std::swap(table_split_index, other.table_split_index);
-    std::swap(table_size, other.table_size);
-    std::swap(table_items_size, other.table_items_size);
-    std::swap(hash, other.hash);
+void ADS_set<Key, N>::swap(ADS_set& first, ADS_set& second) {
+    using std::swap;
+
+    swap(first.split_round, second.split_round);
+    swap(first.table_split_index, second.table_split_index);
+    swap(first.table_size, second.table_size);
+    swap(first.table_items_size, second.table_items_size);
+    swap(first.table, second.table);
+    swap(first.hash, second.hash);
 }
 
 template<typename Key, size_t N>
