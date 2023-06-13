@@ -1,5 +1,15 @@
-simpletest
-btest
+# Project
+.idea/
+
+# Source code from university
 simpletest.cpp
 btest.cpp
+performance_test.cpp
 
+# Binaries
+btest
+simpletestperson
+simpletestsafeunsigned
+simpleteststring
+simpletestunsigned
+perftest

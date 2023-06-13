@@ -1,43 +1,45 @@
-PROGS=simpletest btest
+.DEFAULT_GOAL = all
+
+PROGS=simpleteststring simpletestperson simpletestsafeunsigned simpletestunsigned btest perftest
 
 CXX=g++
-CXXFLAGS=-Wall -Wextra -Werror -std=c++17 -pedantic-errors
-CXXFLAGS_OPT=$(CXXFLAGS) -O3
-CXXFLAGS_DBG=$(CXXFLAGS) -Og -g
+CXXFLAGS_TMP=-Wall -Wextra -Werror -std=c++17 -pedantic-errors
+CXXFLAGS_OPT=$(CXXFLAGS_TMP) -O3
+CXXFLAGS_DBG=$(CXXFLAGS_TMP) -Og -g
 
-simpletest1string:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -DETYPE=std::string simpletest.cpp -o simpletest
+ifeq "$(PROD)" "true"
+	CXXFLAGS=$(CXXFLAGS_OPT)
+else
+	CXXFLAGS=$(CXXFLAGS_DBG)
+endif
 
-simpletest1person:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -DETYPE=Person simpletest.cpp -o simpletest
+ifeq "$(PHASE)" "2"
+	PHASE=-DPH2
+else
+	PHASE=-DPH1
+endif
 
-simpletest1safeunsigned:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -DETYPE=SafeUnsigned simpletest.cpp -o simpletest
+simpletest: simpletestunsigned
 
-simpletest1unsigned:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -DETYPE=unsigned simpletest.cpp -o simpletest
+simpleteststring:
+	$(CXX) $(CXXFLAGS) $(PHASE) -DETYPE=std::string simpletest.cpp -o simpleteststring
 
-simpletest2string:
-	$(CXX) $(CXXFLAGS_DBG) -DPH2 -DETYPE=std::string simpletest.cpp -o simpletest
+simpletestperson:
+	$(CXX) $(CXXFLAGS) $(PHASE) -DETYPE=Person simpletest.cpp -o simpletestperson
 
-simpletest2person:
-	$(CXX) $(CXXFLAGS_DBG) -DPH2 -DETYPE=Person simpletest.cpp -o simpletest
+simpletestsafeunsigned:
+	$(CXX) $(CXXFLAGS) $(PHASE) -DETYPE=SafeUnsigned simpletest.cpp -o simpletestsafeunsigned
 
-simpletest2safeunsigned:
-	$(CXX) $(CXXFLAGS_DBG) -DPH2 -DETYPE=SafeUnsigned simpletest.cpp -o simpletest
+simpletestunsigned:
+	$(CXX) $(CXXFLAGS) $(PHASE) -DETYPE=unsigned simpletest.cpp -o simpletestunsigned
 
-simpletest2unsigned:
-	$(CXX) $(CXXFLAGS_DBG) -DPH2 -DETYPE=unsigned simpletest.cpp -o simpletest
+btest:
+	$(CXX) $(CXXFLAGS) $(PHASE) -pthread btest.cpp -o btest
 
-simpletest: simpletest1string
+perftest:
+	$(CXX) $(CXXFLAGS) -pthread performance_test.cpp -o perftest
 
-btest1:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -pthread btest.cpp -o btest
-
-btest2:
-	$(CXX) $(CXXFLAGS_DBG) -DPH1 -pthread btest.cpp -o btest
-
-btest: btest1
+all: $(PROGS)
 
 clean:
 	rm -Rf $(PROGS)
