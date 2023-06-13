@@ -60,20 +60,12 @@ private:
     }
 
     /**
-     * Get the index of the bucket the given key's value should be at.
+     * Get the bucket where the given key's value should be at.
      *
      * @param key the key to probe for
-     * @return index of the bucket
+     * @return reference to bucket
      */
-    size_type bucket_at(const key_type& key) const;
-
-    /**
-     * Locate the value stored with the given key.
-     *
-     * @param key the key to locate for
-     * @return pointer to found value; if nothing was found nullptr
-     */
-    value_type* locate(const key_type& key) const;
+    Bucket& bucket_at(const key_type& key) const;
 
     /**
      * Allocates the given amount of buckets for the hash table.
@@ -88,14 +80,6 @@ private:
      */
     void split();
 
-    /**
-     * Add a key to the hash table.
-     *
-     * @param key the key to add
-     * @return reference to bucket and index inside of it the value was stored at
-     */
-    std::pair<Bucket&, size_type> add(key_type key);
-
 public:
     /**
      * Creates an empty set.
@@ -108,13 +92,6 @@ public:
     ~ADS_set();
 
     /**
-     * Creates an ADS_set with a given list of keys.
-     *
-     * @param ilist list of keys to initialize with
-     */
-    ADS_set(std::initializer_list<key_type> ilist);
-
-    /**
      * Creates a set with a given range of items.
      *
      * @tparam InputIt type of input iterator
@@ -123,6 +100,13 @@ public:
      */
     template<typename InputIt>
     ADS_set(InputIt first, InputIt last);
+
+    /**
+     * Creates an ADS_set with a given list of keys.
+     *
+     * @param ilist list of keys to initialize with
+     */
+    ADS_set(std::initializer_list<key_type> ilist);
 
     /**
      * Creates a copy of a given set.
@@ -155,13 +139,6 @@ public:
     ADS_set& operator=(std::initializer_list<key_type> ilist);
 
     /**
-     * Insert a given list of keys.
-     *
-     * @param ilist list of keys to insert
-     */
-    void insert(std::initializer_list<key_type> ilist);
-
-    /**
      * Insert a given key.
      *
      * @param key the key to insert
@@ -178,6 +155,13 @@ public:
      */
     template<typename InputIt>
     void insert(InputIt first, InputIt last);
+
+    /**
+     * Insert a given list of keys.
+     *
+     * @param ilist list of keys to insert
+     */
+    void insert(std::initializer_list<key_type> ilist);
 
     /**
      * Clear all values of the set.
@@ -251,9 +235,6 @@ public:
     void dump(std::ostream& o = std::cerr) const;
 
     friend bool operator==(const ADS_set& lhs, const ADS_set& rhs) {
-        if (lhs.split_round != rhs.split_round) return false;
-        if (lhs.table_split_index != rhs.table_split_index) return false;
-        if (lhs.table_size != rhs.table_size) return false;
         if (lhs.table_items_size != rhs.table_items_size) return false;
 
         for (const auto& item: lhs) {
@@ -270,7 +251,6 @@ public:
 
 template<typename Key, size_t N>
 class ADS_set<Key, N>::Bucket {
-private:
     /** Amount of stored values */
     size_type values_size {0};
 
@@ -279,7 +259,7 @@ private:
 
     /** Array of values */
     value_type* values {nullptr};
-private:
+
     /**
      * Expand the capacity of Bucket by N values.
      */
@@ -353,10 +333,10 @@ public:
     /**
      * Push a key to the bucket.
      *
-     * @param key the key to add
+     * @param key the key to insert
      * @return the index where the key was added at.
      */
-    size_type add(key_type key);
+    std::pair<size_type, bool> insert(key_type key);
 
     /**
      * Count how many times a key exists in the bucket (0 or 1 times):
@@ -387,6 +367,13 @@ public:
      * @return amount of stored values
      */
     [[nodiscard]] size_type size() const { return values_size; }
+
+    /**
+     * Get the amount of available values.
+     *
+     * @return amount of available values
+     */
+    [[nodiscard]] size_type capacity() const { return values_capacity; }
 
     /**
      * Get whether the bucket is full.
@@ -427,11 +414,7 @@ private:
     /**
      * Advance current bucket until bucket has values or is at end bucket.
      */
-    void skip_empty_buckets() {
-        while (current != end && current->size() == 0) {
-            ++current;
-        }
-    }
+    void skip_empty_buckets();
 
 public:
     /**
@@ -446,54 +429,28 @@ public:
      * @param end pointer to end bucket
      * @param index index to current value in current bucket
      */
-    explicit Iterator(bucket_pointer current, bucket_pointer end, bucket_size_type index) :
-            current {current}, end {end}, index {index} {
-        if (current->size() >= index) {
-            this->index = 0;
-            skip_empty_buckets();
-        }
-    }
+    explicit Iterator(bucket_pointer current, bucket_pointer end, bucket_size_type index);
 
-    reference operator*() const { return (*current)[index]; }
+    reference operator*() const;
 
-    pointer operator->() const { return &(*current)[index]; }
+    pointer operator->() const;
 
-    Iterator& operator++() {
-        // Do not advance when we reached the end bucket
-        if (current == end) {
-            return *this;
-        }
+    Iterator& operator++();
 
-        // Increment the bucket index
-        ++index;
-
-        // Go to next non-empty bucket
-        if (current->size() >= index) {
-            index = 0;
-            ++current;
-
-            skip_empty_buckets();
-        }
-
-        return *this;
-    }
-
-    Iterator operator++(int) {
-        Iterator tmp {*this};
-        ++*this;
-        return tmp;
-    }
+    Iterator operator++(int);
 
     friend bool operator==(const Iterator& lhs, const Iterator& rhs) {
         return lhs.current == rhs.current && lhs.end == rhs.end &&
                lhs.index == rhs.index;
     }
 
-    friend bool operator!=(const Iterator& lhs, const Iterator& rhs) { return !(lhs == rhs); }
+    friend bool operator!=(const Iterator& lhs, const Iterator& rhs) {
+        return !(lhs == rhs);
+    }
 };
 
 template<typename Key, size_t N>
-typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type& key) const {
+typename ADS_set<Key, N>::Bucket& ADS_set<Key, N>::bucket_at(const key_type& key) const {
     size_type index {h(key)};
 
     // Use next split round's hash function for already split buckets
@@ -501,13 +458,9 @@ typename ADS_set<Key, N>::size_type ADS_set<Key, N>::bucket_at(const key_type& k
         index = g(key);
     }
 
-    return index;
+    return table[index];
 }
 
-template<typename Key, size_t N>
-typename ADS_set<Key, N>::value_type* ADS_set<Key, N>::locate(const key_type& key) const {
-    return table[bucket_at(key)].locate(key);
-}
 
 template<typename Key, size_t N>
 void ADS_set<Key, N>::reserve(size_type new_table_size) {
@@ -556,27 +509,8 @@ void ADS_set<Key, N>::split() {
 
     // Add removed values back to set
     for (size_type i {0}; i < bucket.size(); ++i) {
-        add(bucket[i]);
+        insert(bucket[i]);
     }
-}
-
-template<typename Key, size_t N>
-std::pair<typename ADS_set<Key, N>::Bucket&, typename ADS_set<Key, N>::size_type> ADS_set<Key, N>::add(key_type key) {
-    Bucket& bucket {table[bucket_at(key)]};
-
-    // Ignore already existing keys
-    if (bucket.count(key)) {
-        return {bucket, bucket.index_of(key)};
-    }
-
-    bool should_split = bucket.full();
-    auto bucket_index {bucket.add(std::move(key))};
-
-    if (should_split) split();
-
-    ++table_items_size;
-
-    return {bucket, bucket_index};
 }
 
 template<typename Key, size_t N>
@@ -620,28 +554,40 @@ ADS_set<Key, N>& ADS_set<Key, N>::operator=(std::initializer_list<key_type> ilis
 }
 
 template<typename Key, size_t N>
-void ADS_set<Key, N>::insert(std::initializer_list<key_type> ilist) {
-    insert(ilist.begin(), ilist.end());
-}
-
-template<typename Key, size_t N>
 std::pair<typename ADS_set<Key, N>::iterator, bool> ADS_set<Key, N>::insert(const ADS_set::key_type& key) {
-    // If the key already exists, return the end() iterator
-    if (count(key)) {
-        return {find(key), false};
+    // Reference bucket where key should be inserted
+    Bucket* bucket {&bucket_at(key)};
+
+    // Split bucket if it's full
+    if (bucket->full()) {
+        split();
+
+        // Insert bucket might need an update after split
+        bucket = &bucket_at(key);
     }
 
-    std::pair<Bucket&, size_type> result {add(key)};
+    // Try to insert key in bucket
+    auto [index, added] = bucket->insert(key);
 
-    return {Iterator {&(result.first), table + table_size, result.second}, true};
+    // Increment items size if value was added
+    if (added) ++table_items_size;
+
+    Iterator it {bucket, table + table_size, index};
+
+    return {it, added};
 }
 
 template<typename Key, size_t N>
 template<typename InputIt>
 void ADS_set<Key, N>::insert(InputIt first, InputIt last) {
     for (auto it {first}; it != last; ++it) {
-        add(*it);
+        insert(*it);
     }
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::insert(std::initializer_list<key_type> ilist) {
+    insert(ilist.begin(), ilist.end());
 }
 
 template<typename Key, size_t N>
@@ -653,27 +599,41 @@ void ADS_set<Key, N>::clear() {
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::size_type ADS_set<Key, N>::erase(const ADS_set::key_type& key) {
-    Bucket& bucket {table[bucket_at(key)]};
+    // Reference bucket where key's value should be at
+    Bucket& bucket {bucket_at(key)};
 
-    return bucket.erase(key);
+    // Try to erase value from bucket
+    size_type erased {bucket.erase(key)};
+
+    // Decrement amount of items by how much was erased
+    table_items_size -= erased;
+
+    return erased;
 }
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::size_type ADS_set<Key, N>::count(const key_type& key) const {
-    return locate(key) != nullptr;
+    // Reference where value should be at
+    Bucket& bucket {bucket_at(key)};
+
+    // Check if key could be found in bucket
+    return bucket.locate(key) != nullptr;
 }
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::iterator ADS_set<Key, N>::find(const key_type& key) const {
-    Bucket* bucket {&table[bucket_at(key)]};
-    size_type bucket_index {bucket->index_of(key)};
+    // Reference bucket where key's value should be at
+    Bucket* bucket {&bucket_at(key)};
 
-    // Return the Iterator of the found item
-    if (bucket_index != bucket->size()) {
-        return Iterator {bucket, table + table_size, bucket_index};
+    // Check if value with key exists in bucket
+    size_type index {bucket->index_of(key)};
+
+    // Return iterator to the found item
+    if (index < bucket->capacity()) {
+        return Iterator(bucket, table + table_size, index);
     }
 
-    // Else return the end Iterator
+    // If nothing was found return end iterator
     return end();
 }
 
@@ -758,7 +718,7 @@ void ADS_set<Key, N>::Bucket::expand() {
     size_type new_values_capacity {values_size + N};
     value_type* new_values {new value_type[new_values_capacity]};
 
-    // Copy values to new_values
+    // Copy/Move values to new_values
     for (size_type i {0}; i < values_size; ++i) {
         new_values[i] = std::move(values[i]);
     }
@@ -779,27 +739,34 @@ typename ADS_set<Key, N>::size_type ADS_set<Key, N>::Bucket::index_of(const ADS_
         }
     }
 
-    return values_size;
+    return values_capacity;
 }
 
 template<typename Key, size_t N>
 typename ADS_set<Key, N>::value_type* ADS_set<Key, N>::Bucket::locate(const key_type& key) const {
-    auto index {index_of(key)};
+    size_type index {index_of(key)};
 
-    if (index == values_size) return nullptr;
+    if (index == values_capacity) return nullptr;
 
     return &values[index];
 }
 
 template<typename Key, size_t N>
-typename ADS_set<Key, N>::size_type ADS_set<Key, N>::Bucket::add(key_type key) {
-    // Expand bucket if it exceeds capacity
+std::pair<typename ADS_set<Key, N>::size_type, bool> ADS_set<Key, N>::Bucket::insert(key_type key) {
+    size_type index {index_of(key)};
+
+    // Ignore insert if key already exists
+    if (index != values_capacity) {
+        return {index, false};
+    }
+
+    // If size exceeds capacity, expand it
     if (values_size >= values_capacity) expand();
 
-    // Store key in slice and increment its size
-    values[values_size] = std::move(key);
+    // Store key and increase bucket's size
+    values[index = values_size++] = std::move(key);
 
-    return values_size++;
+    return {index, true};
 }
 
 template<typename Key, size_t N>
@@ -811,11 +778,11 @@ template<typename Key, size_t N>
 typename ADS_set<Key, N>::size_type ADS_set<Key, N>::Bucket::erase(const ADS_set::key_type& key) {
     size_type index {index_of(key)};
 
-    if (index != values_size) return 0;
+    // Do not erase anything if value couldn't be found
+    if (index == values_capacity) return 0;
 
-    reference last_item {values[values_size]};
-
-    values[index] = std::move(last_item);
+    // Replace found value with the last item and decrease bucket's size
+    values[index] = std::move(values[--values_size]);
 
     return 1;
 }
@@ -838,6 +805,60 @@ void ADS_set<Key, N>::Bucket::dump(std::ostream& o) const {
         if (i > 0 && i % N == 0) o << " -> | ";
         o << values[i] << " ";
     }
+}
+
+template<typename Key, size_t N>
+void ADS_set<Key, N>::Iterator::skip_empty_buckets() {
+    while (current != end && current->size() == 0) {
+        ++current;
+    }
+}
+
+template<typename Key, size_t N>
+ADS_set<Key, N>::Iterator::Iterator(bucket_pointer current, bucket_pointer end, bucket_size_type index) :
+        current {current}, end {end}, index {index} {
+    if (index >= current->size()) {
+        this->index = 0;
+        skip_empty_buckets();
+    }
+}
+
+template<typename Key, size_t N>
+typename ADS_set<Key, N>::Iterator::reference ADS_set<Key, N>::Iterator::operator*() const {
+    return (*current)[index];
+}
+
+template<typename Key, size_t N>
+typename ADS_set<Key, N>::Iterator::pointer ADS_set<Key, N>::Iterator::operator->() const {
+    return &(operator*());
+}
+
+template<typename Key, size_t N>
+typename ADS_set<Key, N>::Iterator& ADS_set<Key, N>::Iterator::operator++() {
+    // Do not advance when we reached the end bucket
+    if (current == end) {
+        return *this;
+    }
+
+    // Increment the bucket index
+    ++index;
+
+    // Go to next non-empty bucket
+    if (index >= current->size()) {
+        index = 0;
+        ++current;
+
+        skip_empty_buckets();
+    }
+
+    return *this;
+}
+
+template<typename Key, size_t N>
+typename ADS_set<Key, N>::Iterator ADS_set<Key, N>::Iterator::operator++(int) {
+    Iterator tmp {*this};
+    ++*this;
+    return tmp;
 }
 
 template<typename Key, size_t N>
