@@ -11,7 +11,7 @@ which should be optimized for space-time in the subsequent builds.
 
 Linear Hashing, in general, is a hash table algorithm that consists of buckets 
 labelled *1* through *M*. Each bucket can hold *N* values and when trying to 
-add another value to it will create an overflow bucket. Initially, the pointer 
+insert another value to it will create an overflow bucket. Initially, the pointer 
 *next_to_split* will point to the first bucket in the table. Every time an 
 overflow bucket is created, the bucket at *next_to_split* will be split. In 
 that way, the hash table grows linearly in size, therefore the name *Linear 
@@ -69,7 +69,7 @@ Example adding a value before overflow
    0b01  | 1 | 3 | 5 |
          \-----------/
 
-#2: Now we want to add 6 to the hash table. Here is a step-by-step explain-
+#2: Now we want to insert 6 to the hash table. Here is a step-by-step explain-
     ation of the process.
 
     #2a: Hash the value 6 with h_1(c)
@@ -103,14 +103,14 @@ Example adding a value before overflow
        0b10  | 2 | 6 |   |
              \-----------/
 
-#3: Now let's add the value 8 and 7.
+#3: Now let's insert the value 8 and 7.
 
     #3a: Hash the value 8 with h_2(c), since h_1(c) < next_to_split
 
     h_1(8) = 0b1000 % 2 = 0b0
     h_2(8) = 0b1000 % 4 = 0b00
 
-    Okay, it's still the same bucket, so let's add it there.
+    Okay, it's still the same bucket, so let's insert it there.
 
              /––––––-----\
        0b00  | 0 | 4 | 8 |
